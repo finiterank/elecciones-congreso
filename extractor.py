@@ -27,7 +27,7 @@ def followerids(user):
         print "Congresista: " + user + " (Pagina "+ str(i) + ")"
         output.extend(page)
         print "Pausa de 60 segundos"
-        time.sleep(60)        
+        time.sleep(60)   
     return output
 
 def datosCongresista(user):
@@ -51,9 +51,9 @@ def cuentasCongresistas(lista):
         print "Congresista número " + str(count) + ": " + user
         datos[user] = datosCongresista(user)
 
-file = "cuentas"
+archivocuentas = "cuentas"
 cuentascandidatos = []
-for line in open(file):
+for line in open(archivocuentas):
     cuentascandidatos = cuentascandidatos + [line[:-1]]
 
 cuentasCongresistas(cuentascandidatos)
