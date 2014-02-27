@@ -20,7 +20,7 @@ for(i in 1:149){
   lista.candidatos <- c(lista.candidatos, rep(row.names(summary(json))[i], length(json[[i]]$seguidores)))
 }
 
-seguidores.candidatos.df <- data.frame(candidato = lista.candidatos, seguidor = lista.seguidores, val= rep(1, 1639770))
+seguidores.candidatos.df <- data.frame(candidato = lista.candidatos, seguidor = lista.seguidores)
 
 ```
 
