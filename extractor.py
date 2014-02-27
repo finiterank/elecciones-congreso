@@ -1,5 +1,7 @@
 # Un script para descargar seguidores de candidatos al congreso en Twitter 
 # La lista de candidatos proviene de la base de datos de La Silla Vacía
+# Bajar toda la información tomó mucho tiempo porque creo que fui demasiado chambón 
+# controlando los requests para no excederme en el límite del API. 
 
 import tweepy
 import time
