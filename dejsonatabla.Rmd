@@ -1,0 +1,35 @@
+Conversión de los datos de candidatos en dataframe
+========================================================
+
+```{r}
+library(rjson)
+library(reshape2)
+```
+
+```{r}
+json <- fromJSON(file='minadecandidatos.json', method='C') 
+```
+
+Esta es la lista que te dig
+
+```{r}
+lista.seguidores <- c()
+lista.candidatos <- c()
+for(i in 1:149){
+  lista.seguidores <- c(lista.seguidores, json[[i]]$seguidores)
+  lista.candidatos <- c(lista.candidatos, rep(row.names(summary(json))[i], length(json[[i]]$seguidores)))
+}
+
+seguidores.candidatos.df <- data.frame(candidato = lista.candidatos, seguidor = lista.seguidores, val= rep(1, 1639770))
+
+```
+
+En mi computador el siguiente comando no aguanta: R colapsa y pide ser reiniciado. 
+
+Se puede hacer con fragmentos del data frame, pero después es imposible hacer merge. 
+
+```{r}
+tabla <- dcast(seguidores.candidatos.df, candidato ~ seguidor)
+```
+
+¿Opciones?
