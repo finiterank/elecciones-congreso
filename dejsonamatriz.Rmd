@@ -1,0 +1,80 @@
+Conversión de los datos de candidatos en matriz
+========================================================
+
+```{r}
+library(rjson)
+#library(plyr) #Podia ser util para manejar el objeto json pero no es necesario
+#library(reshape2) #No es necesario
+```
+
+```{r}
+json <- fromJSON(file='minadecandidatos.json', method='C') 
+
+#Hay una incosistencia en el objeto json:
+
+#numseguidores no es igual a length(seguidores) en 39 casos:
+sum(sapply(json, function(x){length(x$seguidores)}) != sapply(json, function(x){x$numseguidores}))
+```
+
+Lista de seguidores:
+
+```{r}
+lista.seguidores <- c()
+for(i in 1:149){
+  lista.seguidores <- unique(c(lista.seguidores, json[[i]]$seguidores))
+}
+
+#Numero de seguidores:
+length(lista.seguidores)
+
+#Lista de indices 
+indices<- lapply(X=json, FUN=function(x, y){match(x$seguidores, y)}, y=lista.seguidores)
+```
+
+Ahora con los indices podemos crear la tabla salvaje. En este caso es mejor una matriz que un data frame para evitar copias y ser algo mas eficiente. Toca aumentarle la memoria al R para que pueda alojar el objeto (estoy en un sistema de 32 bits, uno de 64 tiene más y mejores defaults).
+
+
+```{r}
+memory.limit(size = 4095) #Máximo de memoria para 32 bit
+
+#Crear la matriz con ceros y dimensiones predefinidas (mas eficiente y util para el truco)
+tabla<- matrix(0, ncol=149, nrow=length(lista.seguidores))
+
+#Ahora solamente insertar los 1 necesarios con los indices:
+for (i in 1:149){
+	tabla[indices[[i]],i]<- 1
+	}
+```
+
+Podemos ahora ver cosas como: que cuentas siguen a más de 100 candidatos:
+
+```{r}
+seguidores.total<- rowSums(tabla)
+
+Num <- 75
+
+#A cuantas cuentas siguen los que siguen más de 100 y cuales son:
+too.many.follows <- rbind(lista.seguidores[which(seguidores.total>Num)], 
+		seguidores.total[which(seguidores.total>Num)]
+	)
+too.many.follows[1,]
+```
+
+Un ejercicio simple que se puede hacer a partir de los indices eficientemente y que genera una matriz interesante:
+
+```{r}
+#Cruce de seguidores:
+cruce<- matrix(0, ncol=149, nrow=149)
+
+for (i in 1:149){
+	cruce[i,]<- sapply(indices, function(x,y){sum(y%in%x)/length(y)}, y=indices[[i]])
+	}	
+
+colnames(cruce)<- rownames(cruce)<- names(indices)
+```
+Entonces por ejemplo el 3.5% de los seguidores de Robledo siguen a Barreras y el 48% de los que siguen a Barreras siguen a Robledo
+
+```{r}
+100*cruce["JERobledo", "RoyBarreras"]
+100*cruce["RoyBarreras", "JERobledo"]
+```
