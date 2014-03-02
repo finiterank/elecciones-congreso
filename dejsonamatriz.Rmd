@@ -3,8 +3,14 @@ Conversión de los datos de candidatos en matriz
 
 ```{r}
 library(rjson)
+#library(FactoMineR)
+library(vegan) # isomap
+library(Hmisc)
+library(ggplot2)
+library(sna)
 #library(plyr) #Podia ser util para manejar el objeto json pero no es necesario
-#library(reshape2) #No es necesario
+library(reshape2) #No es necesario
+setwd("~/Documents/R Notebooks/elecciones2014")
 ```
 
 ```{r}
@@ -24,19 +30,98 @@ for(i in 1:149){
   lista.seguidores <- unique(c(lista.seguidores, json[[i]]$seguidores))
 }
 
+lista.candidatos <- c()
+for(i in 1:149){
+  lista.candidatos <- c(lista.candidatos, json[[i]]$id)
+}
+
+
 #Numero de seguidores:
 length(lista.seguidores)
 
 #Lista de indices 
 indices<- lapply(X=json, FUN=function(x, y){match(x$seguidores, y)}, y=lista.seguidores)
+indices.follows<- lapply(X=json, FUN=function(x, y){match(x$seguidores, y)}, y=lista.candidatos)
+
+```
+
+
+```{r}
+#memory.limit(size = 4095) #Máximo de memoria para 32 bit (en Windows)
+
+tabla.follows <- matrix(0, ncol=149, nrow=149)
+
+for(i in 1:149){
+  tabla.follows[indices.follows[[i]], i] <- 1
+}
+colnames(tabla.follows)<- rownames(tabla.follows)<- names(indices)
+
+adjacencyList <- melt(tabla.follows)
+adjacencyList <- adjacencyList[adjacencyList$value > 0,]
+layoutCoordinates <- gplot(tabla.follows)
+
+# Truco tomado de acá: http://is-r.tumblr.com/post/38459242505/beautiful-network-diagrams-with-ggplot2
+
+edgeMaker <- function(whichRow, len = 100, curved = TRUE){
+  fromC <- layoutCoordinates[adjacencyList[whichRow, 1], ]  # Origin
+  toC <- layoutCoordinates[adjacencyList[whichRow, 2], ]  # Terminus
+ 
+  # Add curve:
+  graphCenter <- colMeans(layoutCoordinates)  # Center of the overall graph
+  bezierMid <- c(fromC[1], toC[2])  # A midpoint, for bended edges
+  distance1 <- sum((graphCenter - bezierMid)^2)
+  if(distance1 < sum((graphCenter - c(toC[1], fromC[2]))^2)){
+    bezierMid <- c(toC[1], fromC[2])
+    }  # To select the best Bezier midpoint
+  bezierMid <- (fromC + toC + bezierMid) / 3  # Moderate the Bezier midpoint
+  if(curved == FALSE){bezierMid <- (fromC + toC) / 2}  # Remove the curve
+ 
+  edge <- data.frame(bezier(c(fromC[1], bezierMid[1], toC[1]),  # Generate
+                            c(fromC[2], bezierMid[2], toC[2]),  # X & y
+                            evaluation = len))  # Bezier path coordinates
+  edge$Sequence <- 1:len  # For size and colour weighting in plot
+  edge$Group <- paste(adjacencyList[whichRow, 1:2], collapse = ">")
+  return(edge)
+  }
+
+# Generate a (curved) edge path for each pair of connected nodes
+allEdges <- lapply(1:nrow(adjacencyList), edgeMaker, len = 500, curved = TRUE)
+allEdges <- do.call(rbind, allEdges)  # a fine-grained path ^, with bend ^
+ 
+zp1 <- ggplot(allEdges)  # Pretty simple plot code
+zp1 <- zp1 + geom_path(aes(x = x, y = y, group = Group,  # Edges with gradient
+                           colour = Sequence, size = -Sequence), alpha=1/20)  # and taper
+zp1 <- zp1 + geom_point(data = data.frame(layoutCoordinates),  # Add nodes
+                        aes(x = x, y = y), size = 2, pch = 21,
+                        colour = "black", fill = "gray")  # Customize gradient v
+zp1 <- zp1 + geom_text(data = data.frame(layoutCoordinates),  # Add nodes
+                        aes(x = x, y = y+1, label=paste("@", names(indices), sep="")), size=2, color="red")  # Customize gradient v
+zp1 <- zp1 + scale_colour_gradient(low = gray(0), high = gray(9/10), guide = "none")
+zp1 <- zp1 + scale_size(range = c(1/10, 1), guide = "none")  # Customize taper
+
+new_theme_empty <- theme_bw()
+new_theme_empty$line <- element_blank()
+new_theme_empty$rect <- element_blank()
+new_theme_empty$strip.text <- element_blank()
+new_theme_empty$axis.text <- element_blank()
+new_theme_empty$plot.title <- element_blank()
+new_theme_empty$axis.title <- element_blank()
+new_theme_empty$plot.margin <- structure(c(0, 0, -1, -1), unit = "lines",
+                                         valid.unit = 3L, class = "unit")
+ 
+
+zp1 <- zp1 + new_theme_empty 
+
+zp1
+
+ggsave("grafo-bonito.png", zp1, h = 10, w = 10)
+#write.csv(tabla.follows, "tabla.follows.csv")
 ```
 
 Ahora con los indices podemos crear la tabla salvaje. En este caso es mejor una matriz que un data frame para evitar copias y ser algo mas eficiente. Toca aumentarle la memoria al R para que pueda alojar el objeto (estoy en un sistema de 32 bits, uno de 64 tiene más y mejores defaults).
 
 
 ```{r}
-memory.limit(size = 4095) #Máximo de memoria para 32 bit
-
 #Crear la matriz con ceros y dimensiones predefinidas (mas eficiente y util para el truco)
 tabla<- matrix(0, ncol=149, nrow=length(lista.seguidores))
 
@@ -45,6 +130,30 @@ for (i in 1:149){
 	tabla[indices[[i]],i]<- 1
 	}
 ```
+
+```{r}
+tabla <- t(tabla)
+normas <- sqrt(rowSums(tabla))
+num.seg <- rowSums(tabla)
+tabla.normalized <- tabla/normas
+dis <- vegdist(tabla.normalized, method="euclidean")
+candidatos.lsv.df <- read.csv("candidatos.csv")
+subtabla.cand <- candidatos.lsv.df[,c("Twitter", "Género", "Partido", "Estado")]
+```
+
+```{r}
+ord <- isomap(dis, k=7, fragmentedOK=T)
+# pl <- plot(ord)
+points <- ord$points[,c(1,2)]
+points <- as.data.frame(points)
+points$seguidores <- num.seg
+cuentas <- paste("@", names(indices), sep="")
+points$cuenta <- cuentas
+candidatos.df <- merge(points, subtabla.cand, by.x="cuenta", by.y="Twitter", all.x=T, all.y=F)
+names(candidatos.df) <- c("twitter", "x", "y", "seguidores",  "genero", "partido", "departamento")
+qplot(x,y, data=candidatos.df, colour=partido, size=log(seguidores))
+```
+
 
 Podemos ahora ver cosas como: que cuentas siguen a más de 100 candidatos:
 
@@ -78,3 +187,4 @@ Entonces por ejemplo el 3.5% de los seguidores de Robledo siguen a Barreras y el
 100*cruce["JERobledo", "RoyBarreras"]
 100*cruce["RoyBarreras", "JERobledo"]
 ```
+
